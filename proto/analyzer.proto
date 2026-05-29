@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package analyzer;
+
+// TODO: define messages and service
+service AnalyzerService {
+  rpc AnalyzeComposition(CompRequest)  returns (CompResponse);
+  rpc RecommendPick     (PickRequest)  returns (PickResponse);
+}
+
+message CompRequest {
+  repeated int32 champion_ids = 1;
+}
+
+message CompResponse {
+  double win_rate   = 1;
+  double confidence = 2;
+}
+
+message PickRequest {
+  repeated int32 ally_ids   = 1;
+  repeated int32 enemy_ids  = 2;
+}
+
+message PickResponse {
+  repeated int32 recommended_ids = 1;
+  repeated double scores         = 2;
+}

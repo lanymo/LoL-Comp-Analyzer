@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      target: server
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./data:/app/data:ro
+
+  client:
+    build:
+      context: .
+      target: client
+    depends_on:
+      - server
+    environment:
+      - SERVER_ADDR=server:50051
+    # override CMD at runtime:
+    #   docker compose run client --champions 8,432,96,11,112

@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+
+# Data files (download separately — see README)
+data/*.csv
+data/*.json
+
+# Benchmark results
+eval/*.csv
+eval/*.json
+eval/*.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp

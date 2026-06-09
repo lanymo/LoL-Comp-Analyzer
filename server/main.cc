@@ -9,6 +9,12 @@ int main(int argc, char** argv) {
 
     AnalyzerServiceImpl service;
     grpc::ServerBuilder builder;
+
+    if (!service.init("data/games.csv")){
+        std:: cerr << "fail to initialize service\n";
+        return 1;
+    }
+
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
 

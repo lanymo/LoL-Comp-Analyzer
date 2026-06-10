@@ -1,15 +1,27 @@
 #include "analyzer_service.h"
 
-// TODO: implement AnalyzeComposition
+#define all(x) (x).begin(), (x).end()
+
+bool AnalyzerServiceImpl::init(const std::string& csv_path){
+    if (!engine_.loadCSV(csv_path)) return false;
+    engine_.buildIndex();
+    return true;
+}
+
 grpc::Status AnalyzerServiceImpl::AnalyzeComposition(
     grpc::ServerContext* ctx,
     const analyzer::CompRequest* req,
     analyzer::CompResponse* res)
 {
     (void)ctx;
-    // stub: pass champion IDs to stats_engine
-    res->set_win_rate(0.0);
-    res->set_confidence(0.0);
+    std::vector<int> ally(all(req->ally_ids()));
+    std::vector<int> enemy(all(req->enemy_ids()));
+
+    double lo = 0.0, hi = 0.0;
+    double mean = engine_.bootstrapWinRate(ally, enemy, req->bootstrap_r(), &lo, &hi);
+    res->set_win_rate(mean);
+    res->set_ci_low(lo);
+    res->set_ci_high(hi);
     return grpc::Status::OK;
 }
 
@@ -20,6 +32,6 @@ grpc::Status AnalyzerServiceImpl::RecommendPick(
     analyzer::PickResponse* res)
 {
     (void)ctx;
-    // stub: return empty recommendation
+    
     return grpc::Status::OK;
 }

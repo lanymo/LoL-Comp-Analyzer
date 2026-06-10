@@ -2,19 +2,21 @@ syntax = "proto3";
 
 package analyzer;
 
-// TODO: define messages and service
 service AnalyzerService {
   rpc AnalyzeComposition(CompRequest)  returns (CompResponse);
   rpc RecommendPick     (PickRequest)  returns (PickResponse);
 }
 
 message CompRequest {
-  repeated int32 champion_ids = 1;
+  repeated int32 ally_ids   = 1;  // 분석 대상 아군 조합
+  repeated int32 enemy_ids  = 2;  // 적군 조합 (비우면 시너지-only 모드)
+  int32          bootstrap_r = 3; // 부트스트랩 리샘플 횟수 R (0이면 점추정)
 }
 
 message CompResponse {
-  double win_rate   = 1;
-  double confidence = 2;
+  double win_rate = 1;  // 평균 승률 추정치
+  double ci_low   = 2;  // 95% 신뢰구간 하한
+  double ci_high  = 3;  // 95% 신뢰구간 상한
 }
 
 message PickRequest {

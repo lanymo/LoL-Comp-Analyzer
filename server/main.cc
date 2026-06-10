@@ -15,10 +15,16 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+    int selected_port = 0;  // 바인딩 성공 시 실제 포트, 실패 시 0
+    builder.AddListeningPort(address, grpc::InsecureServerCredentials(), &selected_port);
     builder.RegisterService(&service);
 
     auto server = builder.BuildAndStart();
+    if (!server || selected_port == 0) {
+        std::cerr << "Failed to bind/start server on " << address
+                  << " (port already in use?)\n";
+        return 1;
+    }
     std::cout << "Server listening on " << address << std::endl;
     server->Wait();
     return 0;

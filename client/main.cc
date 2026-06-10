@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <vector>
 
 #include <grpcpp/grpcpp.h>
@@ -8,10 +9,11 @@
 
 static std::vector<int> parseIds(const std::string& csv) {
     std::vector<int> ids;
-    
-    // TODO: csv를 ','로 잘라서 각 토큰을 std::stoi로 int 변환 후 push_back
-    //  힌트: std::stringstream + std::getline(ss, token, ',') 패턴이 가장 쉬움.
-    //        REST로 치면 쿼리스트링 "?ids=1,2,3"를 파싱하는 것과 같은 일.
+    std::stringstream ss(csv);
+    std::string token;
+    while (std::getline(ss, token, ',')){
+        ids.push_back(std::stoi(token));
+    }
     return ids;
 }
 
@@ -23,12 +25,13 @@ int main(int argc, char** argv) {
     std::vector<int> enemy = {};
     int bootstrap_r = 0;
 
-    // TODO(1): argv를 순회하며 플래그 파싱
-    //   --champions 1,2,3,4,5  → ally  = parseIds(...)
-    //   --enemies   6,7,8,9,10 → enemy = parseIds(...)
-    //   --r 500                → bootstrap_r = std::stoi(...)
-    //   힌트: for (int i = 1; i < argc; ++i) { std::string a = argv[i]; ... }
-    //         지금은 건너뛰고 기본값으로 먼저 통신부터 성공시켜도 됨.
+    for (int i = 1; i < argc; ++i){
+        std::string a = argv[i];
+        if (a == "--champions" && i + 1 < argc) ally = parseIds(argv[++i]);
+        else if (a == "--enemies" && i + 1 < argc) enemy = parseIds(argv[++i]);
+        else if (a == "--r" && i + 1 < argc) bootstrap_r = std::stoi(argv[++i]);
+        else std::cerr << "Unknown flag: " << a << "\n";
+    }
 
     // 1. 채널 생성
     auto channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());

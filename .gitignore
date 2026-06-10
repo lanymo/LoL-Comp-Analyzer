@@ -6,7 +6,7 @@ data/*.csv
 data/*.json
 
 # Benchmark results
-eval/*.csv
+eval/results/
 eval/*.json
 eval/*.txt
 

@@ -11,8 +11,6 @@
 
 using namespace std;
 
-// ─── Key helpers ────────────────────────────────────────────────────────────
-
 uint64_t StatsEngine::synergyKey(int a, int b) {
     if (a > b) swap(a, b);
     return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b;
@@ -21,8 +19,6 @@ uint64_t StatsEngine::synergyKey(int a, int b) {
 uint64_t StatsEngine::matchupKey(int a, int b) {
     return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b;
 }
-
-// ─── CSV Loader ──────────────────────────────────────────────────────────────
 
 bool StatsEngine::loadCSV(const string& path) {
     ifstream file(path);
@@ -112,8 +108,6 @@ bool StatsEngine::loadCSV(const string& path) {
     return !games_.empty();
 }
 
-// ─── Index builder ───────────────────────────────────────────────────────────
-
 void StatsEngine::buildIndex() {
     int n       = (int)games_.size();
     int nthreads = omp_get_max_threads();
@@ -128,7 +122,7 @@ void StatsEngine::buildIndex() {
         const Game& g = games_[i];
         bool t1_won = (g.winner == 1);
 
-        // ── Synergy pairs, team 1 ──
+        // Synergy pairs, team 1
         for (int a = 0; a < 5; ++a) {
             for (int b = a + 1; b < 5; ++b) {
                 auto& s = local_syn[tid][synergyKey(g.t1[a], g.t1[b])];
@@ -137,7 +131,7 @@ void StatsEngine::buildIndex() {
             }
         }
 
-        // ── Synergy pairs, team 2 ──
+        // Synergy pairs, team 2
         for (int a = 0; a < 5; ++a) {
             for (int b = a + 1; b < 5; ++b) {
                 auto& s = local_syn[tid][synergyKey(g.t2[a], g.t2[b])];
@@ -146,7 +140,7 @@ void StatsEngine::buildIndex() {
             }
         }
 
-        // ── Matchup pairs (directional: t1_champ vs t2_champ) ──
+        // Matchup pairs (directional: t1_champ vs t2_champ)
         for (int a = 0; a < 5; ++a) {
             for (int b = 0; b < 5; ++b) {
                 auto& s = local_mat[tid][matchupKey(g.t1[a], g.t2[b])];
@@ -171,12 +165,60 @@ void StatsEngine::buildIndex() {
         }
     }
 
+    // Collect the unique champion roster (small: ~170 ids) for RecommendPick.
+    {
+        unordered_map<int, char> seen;
+        for (const Game& g : games_) {
+            for (int i = 0; i < 5; ++i) { seen[g.t1[i]] = 1; seen[g.t2[i]] = 1; }
+        }
+        champion_ids_.clear();
+        champion_ids_.reserve(seen.size());
+        for (auto& kv : seen) champion_ids_.push_back(kv.first);
+        sort(champion_ids_.begin(), champion_ids_.end());
+    }
+
     cout << "[StatsEngine] Index built: "
               << synergy_stats_.size() << " synergy pairs, "
-              << matchup_stats_.size() << " matchup pairs\n";
+              << matchup_stats_.size() << " matchup pairs, "
+              << champion_ids_.size() << " champions\n";
 }
 
-// ─── Point-estimate score (no resampling) ────────────────────────────────────
+vector<pair<int, double>> StatsEngine::recommendPicks(const vector<int>& ally_ids,
+                                                      const vector<int>& enemy_ids,
+                                                      int top_k) const {
+    // Candidates = roster minus champions already drafted on either side.
+    vector<int> candidates;
+    candidates.reserve(champion_ids_.size());
+    for (int id : champion_ids_) {
+        bool taken = false;
+        for (int a : ally_ids)  if (a == id) { taken = true; break; }
+        if (!taken)
+            for (int e : enemy_ids) if (e == id) { taken = true; break; }
+        if (!taken) candidates.push_back(id);
+    }
+
+    int m = (int)candidates.size();
+    vector<double> scores(m);
+
+    // scoreComposition only reads the (immutable) index, so this is race-free.
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < m; ++i) {
+        vector<int> trial = ally_ids;
+        trial.push_back(candidates[i]);
+        scores[i] = scoreComposition(trial, enemy_ids);
+    }
+
+    vector<pair<int, double>> ranked(m);
+    for (int i = 0; i < m; ++i) ranked[i] = {candidates[i], scores[i]};
+
+    if (top_k < 0 || top_k > m) top_k = m;
+    partial_sort(ranked.begin(), ranked.begin() + top_k, ranked.end(),
+                 [](const pair<int, double>& l, const pair<int, double>& r) {
+                     return l.second > r.second;
+                 });
+    ranked.resize(top_k);
+    return ranked;
+}
 
 double StatsEngine::scoreComposition(const vector<int>& ally_ids,
                                      const vector<int>& enemy_ids) const {
@@ -208,8 +250,6 @@ double StatsEngine::scoreComposition(const vector<int>& ally_ids,
     return cnt > 0 ? sum / cnt : 0.5;
 }
 
-// ─── Bootstrap confidence interval ───────────────────────────────────────────
-
 double StatsEngine::bootstrapWinRate(const vector<int>& ally_ids,
                                      const vector<int>& enemy_ids,
                                      int R,
@@ -222,7 +262,6 @@ double StatsEngine::bootstrapWinRate(const vector<int>& ally_ids,
         return s;
     }
 
-    // Pre-compute query pair keys so each thread can allocate exactly-sized maps
     vector<uint64_t> syn_keys, mat_keys;
     {
         int na = (int)ally_ids.size();
@@ -243,20 +282,17 @@ double StatsEngine::bootstrapWinRate(const vector<int>& ally_ids,
                          (uint32_t)(omp_get_thread_num() * 2654435761u));
         uniform_int_distribution<int> dist(0, n - 1);
 
-        // Pre-allocate thread-local pair stat maps with exact capacity
         unordered_map<uint64_t, PairStat> syn_r, mat_r;
         syn_r.reserve(syn_keys.size() * 2);
         mat_r.reserve(mat_keys.size() * 2);
 
         #pragma omp for schedule(static)
         for (int r = 0; r < R; ++r) {
-            // Reset maps to query keys with zero stats
             syn_r.clear();
             mat_r.clear();
             for (uint64_t k : syn_keys) syn_r[k] = {};
             for (uint64_t k : mat_keys) mat_r[k] = {};
 
-            // Resample N games with replacement
             for (int i = 0; i < n; ++i) {
                 const Game& g = games_[dist(rng)];
                 bool t1_won = (g.winner == 1);

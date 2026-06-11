@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <utility>
 #include <cstdint>
 
 using namespace std;
@@ -36,13 +37,22 @@ public:
                             double* ci_low,
                             double* ci_high) const;
 
+    // For each candidate champion not already in ally/enemy, score the comp
+    // formed by appending it to ally (OpenMP-parallel over candidates), then
+    // return the top_k candidates sorted by expected win rate (desc).
+    vector<pair<int, double>> recommendPicks(const vector<int>& ally_ids,
+                                             const vector<int>& enemy_ids,
+                                             int top_k) const;
+
     int gameCount() const { return static_cast<int>(games_.size()); }
+    const vector<int>& championIds() const { return champion_ids_; }
 
     const unordered_map<uint64_t, PairStat>& synergyStats() const { return synergy_stats_; }
     const unordered_map<uint64_t, PairStat>& matchupStats()  const { return matchup_stats_; }
 
 private:
     vector<Game> games_;
+    vector<int>  champion_ids_;   // sorted unique champion ids seen in games_
 
     // synergy_stats_: sorted pair key (min<<32|max) → wins = that pair's team won
     unordered_map<uint64_t, PairStat> synergy_stats_;

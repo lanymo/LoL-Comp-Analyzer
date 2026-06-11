@@ -25,13 +25,19 @@ grpc::Status AnalyzerServiceImpl::AnalyzeComposition(
     return grpc::Status::OK;
 }
 
-// TODO: implement RecommendPick
 grpc::Status AnalyzerServiceImpl::RecommendPick(
     grpc::ServerContext* ctx,
     const analyzer::PickRequest* req,
     analyzer::PickResponse* res)
 {
     (void)ctx;
-    
+    std::vector<int> ally(all(req->ally_ids()));
+    std::vector<int> enemy(all(req->enemy_ids()));
+
+    constexpr int kTopK = 10;
+    for (const auto& [id, score] : engine_.recommendPicks(ally, enemy, kTopK)) {
+        res->add_recommended_ids(id);
+        res->add_scores(score);
+    }
     return grpc::Status::OK;
 }

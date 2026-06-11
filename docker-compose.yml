@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   server:
     build:
@@ -8,7 +6,9 @@ services:
     ports:
       - "50051:50051"
     volumes:
-      - ./data:/app/data:ro
+      - ./data:/app/data:ro        # games.csv는 이미지에 굽지 않고 마운트
+    environment:
+      - OMP_NUM_THREADS=8          # 연산 수준 병렬성 (필요 시 조절)
 
   client:
     build:
@@ -16,7 +16,11 @@ services:
       target: client
     depends_on:
       - server
+    volumes:
+      - ./data:/app/data:ro        # champion_info.json (id→이름 표시용)
     environment:
-      - SERVER_ADDR=server:50051
-    # override CMD at runtime:
-    #   docker compose run client --champions 8,432,96,11,112
+      - SERVER_ADDR=server:50051   # compose 네트워크에서 서버 컨테이너 주소
+    # 사용법 (인자는 ENTRYPOINT 뒤에 붙음):
+    #   docker compose up -d server
+    #   docker compose run --rm client --champions 8,432,96,11,112 --r 500
+    #   docker compose run --rm client --champions 8,432,96,11 --recommend

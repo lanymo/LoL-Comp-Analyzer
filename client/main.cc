@@ -6,6 +6,7 @@
 
 #include <grpcpp/grpcpp.h>
 #include "analyzer.grpc.pb.h"   // 생성된 stub: analyzer::AnalyzerService::Stub
+#include "champion_map.h" 
 
 
 static std::vector<int> parseIds(const std::string& csv) {
@@ -47,6 +48,9 @@ int main(int argc, char** argv) {
     // 반환 타입은 std::unique_ptr<analyzer::AnalyzerService::Stub>
     auto stub = analyzer::AnalyzerService::NewStub(channel);
 
+    // id → 이름 매핑 (파일 없으면 빈 맵 → "#id"로 폴백 출력)
+    auto names = loadChampionNames("data/champion_info.json");
+
     // --recommend 모드: 후보 챔피언별 기대 승률을 병렬 평가해 top-K 반환
     if (recommend) {
         analyzer::PickRequest req;
@@ -61,9 +65,12 @@ int main(int argc, char** argv) {
                       << " " << status.error_message() << "\n";
             return 1;
         }
-        std::cout << "Recommended picks (champ_id : expected_win_rate):\n";
+        std::cout << "Current ally: " << champList(names, ally) << "\n";
+        if (!enemy.empty())
+            std::cout << "Enemy: " << champList(names, enemy) << "\n";
+        std::cout << "Recommended picks (expected win rate):\n";
         for (int i = 0; i < res.recommended_ids_size(); ++i) {
-            std::cout << "  " << res.recommended_ids(i)
+            std::cout << "  " << champLabel(names, res.recommended_ids(i))
                       << " : " << res.scores(i) << "\n";
         }
         return 0;
@@ -83,6 +90,9 @@ int main(int argc, char** argv) {
 
     // 5. 결과 처리 / 출력
     if (status.ok()){
+        std::cout << "Ally:  " << champList(names, ally) << "\n";
+        if (!enemy.empty())
+            std::cout << "Enemy: " << champList(names, enemy) << "\n";
         std::cout << "win_rate = " << res.win_rate()
                   << " ci = [" << res.ci_low() << ", " << res.ci_high() << "]\n";
     } else{

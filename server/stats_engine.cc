@@ -3,13 +3,41 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string>
 
 using namespace std;
+
+// Base seed for the bootstrap RNG, resolved once from the environment.
+//   BOOTSTRAP_SEED set   → return that fixed value  (deterministic, reproducible)
+//   unset / unparseable  → return nullopt           (caller draws a fresh seed)
+// Magic-static init is thread-safe and only runs on the first call, which we
+// make from outside any parallel region.
+static optional<uint32_t> bootstrapBaseSeed() {
+    static optional<uint32_t> cached = []() -> optional<uint32_t> {
+        const char* s = getenv("BOOTSTRAP_SEED");
+        if (!s || !*s) {
+            cout << "[StatsEngine] bootstrap RNG: nondeterministic "
+                    "(set BOOTSTRAP_SEED for reproducible runs)\n";
+            return nullopt;
+        }
+        try {
+            uint32_t v = (uint32_t)stoul(s);
+            cout << "[StatsEngine] bootstrap RNG: fixed seed = " << v << "\n";
+            return v;
+        } catch (...) {
+            cout << "[StatsEngine] bootstrap RNG: BOOTSTRAP_SEED=\"" << s
+                 << "\" not parseable, falling back to nondeterministic\n";
+            return nullopt;
+        }
+    }();
+    return cached;
+}
 
 uint64_t StatsEngine::synergyKey(int a, int b) {
     if (a > b) swap(a, b);
@@ -275,11 +303,16 @@ double StatsEngine::bootstrapWinRate(const vector<int>& ally_ids,
 
     vector<double> scores(R);
 
+    // Resolve the seed policy once, single-threaded, before forking workers.
+    const optional<uint32_t> base_seed = bootstrapBaseSeed();
+
     #pragma omp parallel
     {
-        // Per-thread RNG (seeded uniquely per thread)
-        mt19937 rng(random_device{}() ^
-                         (uint32_t)(omp_get_thread_num() * 2654435761u));
+        // Per-thread RNG, seeded uniquely per thread so streams don't overlap.
+        // Fixed base → reproducible for a given (seed, thread count); otherwise
+        // each thread draws a fresh nondeterministic seed.
+        uint32_t seed = base_seed ? *base_seed : random_device{}();
+        mt19937 rng(seed ^ (uint32_t)(omp_get_thread_num() * 2654435761u));
         uniform_int_distribution<int> dist(0, n - 1);
 
         unordered_map<uint64_t, PairStat> syn_r, mat_r;

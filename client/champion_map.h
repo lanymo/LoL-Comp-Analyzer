@@ -38,7 +38,7 @@ inline std::unordered_map<int, std::string> loadChampionNames(const std::string&
     return names;
 }
 
-// 매핑에 없는 id는 "#id"로 표기 (JSON 파일이 없어도 동작해야 하므로)
+// 매핑에 없는 id는 "#id"로 표기 
 inline std::string champLabel(const std::unordered_map<int, std::string>& names, int id) {
     auto it = names.find(id);
     return it != names.end() ? it->second : ("#" + std::to_string(id));

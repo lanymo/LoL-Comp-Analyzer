@@ -19,3 +19,8 @@ __pycache__/
 .vscode/
 .idea/
 *.swp
+
+# Local-only docs (kept on disk, not published)
+CLAUDE.md
+claude.md
+docs/proposal_grpc_openmp.md

@@ -18,7 +18,7 @@ CLIENT_DIR := client
 PROTO_SRC  := $(PROTO_DIR)/analyzer.proto
 PROTO_GEN  := $(BUILD_DIR)/analyzer.pb.cc $(BUILD_DIR)/analyzer.grpc.pb.cc
 
-.PHONY: all server client benchmark clean proto
+.PHONY: all server client benchmark clean proto test
 
 all: server client benchmark
 
@@ -77,3 +77,15 @@ $(BUILD_DIR):
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+# ── test ──────────────────────────────────────────────────────────
+# 엔진 단위 테스트: gRPC/protobuf 없이 stats_engine.cc 하나만 링크한다
+# (계산 계층이 네트워크 계층과 분리돼 있어 가능). 빌드 후 즉시 실행하고
+# 실패 시 비0 종료코드를 반환한다.
+TEST_SRCS := tests/engine_test.cc $(SERVER_DIR)/stats_engine.cc
+
+test: $(BUILD_DIR)/engine_test
+	$(BUILD_DIR)/engine_test
+
+$(BUILD_DIR)/engine_test: $(TEST_SRCS) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I$(SERVER_DIR) $(TEST_SRCS) -o $@

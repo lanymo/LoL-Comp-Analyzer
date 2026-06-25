@@ -29,19 +29,28 @@ OUTDIR=eval/results
 REQUESTS=${REQUESTS:-20}   # 측정 요청 수(스레드당)
 WARMUP=${WARMUP:-5}        # 버릴 워밍업 요청 수(스레드당)
 
-# 벤치마크가 뱉는 CSV 한 줄의 컬럼 정의
+# 벤치마크가 뱉는 CSV 한 줄의 컬럼
 CSV_HEADER="clients,r,ok,errors,throughput_rps,mean_ms,p50_ms,p95_ms,p99_ms"
 
 mkdir -p "$OUTDIR"
 SERVER_PID=""
 
-# ─── 서버 기동/종료 헬퍼 ──────────────────────────────────────────────────────
+# 서버 기동/종료 헬퍼
 # OMP_NUM_THREADS를 지정해 서버를 백그라운드로 띄우고, "listening" 로그가 뜰 때까지
 # 기다린다. 서버는 기동 시 CSV 로드 + 인덱스 빌드를 하므로 즉시 준비되지 않는다.
 start_server() {
     local omp=$1
+
+    # 좀비 서버 가드: gRPC는 SO_REUSEPORT를 쓰므로 이전 실행이 남아 있어도
+    # 새 서버가 "성공적으로" 바인딩되고, 요청이 죽은 쪽으로 가서 전멸할 수 있다.
+    if pgrep -f "$(basename "$SERVER")" > /dev/null 2>&1; then
+        echo "[bench] !! analyzer_server가 이미 떠 있음 — 'pkill -f analyzer_server' 후 재시도"
+        exit 1
+    fi
+
     echo "[bench] starting server (OMP_NUM_THREADS=$omp) ..."
-    OMP_NUM_THREADS="$omp" "$SERVER" > "$OUTDIR/server.log" 2>&1 &
+    OMP_NUM_THREADS="$omp" OMP_PROC_BIND=close OMP_PLACES=cores \
+        "$SERVER" > "$OUTDIR/server.log" 2>&1 &
     SERVER_PID=$!
 
     for _ in $(seq 1 120); do          # 최대 60초 대기 (0.5s × 120)
@@ -80,9 +89,8 @@ run_capture() {
              --r "$r"
 }
 
-# ─── 실험 1: Thread scaling (speedup) ─────────────────────────────────────────
+# 실험 1: Thread scaling (speedup)
 # 단일 클라이언트(요청 경쟁 없음)로 순수 OpenMP 가속만 측정.
-# R은 무겁게(1000) 둬야 병렬 이득이 또렷하다.
 # 출력에 omp_threads 컬럼을 앞에 덧붙인다(벤치마크는 서버 스레드 수를 모르므로).
 thread_scaling() {
     local r=${1:-1000}
@@ -100,9 +108,8 @@ thread_scaling() {
     echo "[bench] -> $out"
 }
 
-# ─── 실험 2: Concurrency scaling (latency / throughput) ───────────────────────
+# 실험 2: Concurrency scaling (latency / throughput)
 # 서버를 전체 코어(OMP=nproc)로 한 번 띄우고 동시 클라이언트 수만 키운다.
-# 한 요청이 이미 모든 코어를 쓰므로, 동시성↑ 시 경쟁이 드러난다(보고서 분석거리).
 concurrency_scaling() {
     local omp=${1:-$(nproc)}
     local r=${2:-500}
@@ -120,7 +127,7 @@ concurrency_scaling() {
     echo "[bench] -> $out"
 }
 
-# ─── 실험 3: Compute intensity (병목 이동) ────────────────────────────────────
+# 실험 3: Compute intensity (병목 이동)
 # 단일 클라이언트로 R만 키운다. R=0이 통신 바닥값, R↑에서 CPU가 병목이 됨.
 intensity_sweep() {
     local omp=${1:-$(nproc)}
@@ -139,7 +146,6 @@ intensity_sweep() {
     echo "[bench] -> $out"
 }
 
-# ─── main ─────────────────────────────────────────────────────────────────────
 main() {
     [[ -x "$SERVER" ]] || { echo "[bench] $SERVER 없음 — 먼저 'make' 하세요"; exit 1; }
     [[ -x "$BENCH"  ]] || { echo "[bench] $BENCH 없음 — 먼저 'make' 하세요";  exit 1; }

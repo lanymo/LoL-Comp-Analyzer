@@ -78,8 +78,15 @@ static void worker(const Config& cfg, std::atomic<bool>* start_gate, ThreadResul
         grpc::Status st = stub->AnalyzeComposition(&ctx, req, &res);
         auto t1 = Clock::now();
 
-        if (!st.ok()) { ++out->errors; continue; }
-        if (n < cfg.warmup) continue;            // 워밍업 구간은 버림
+        if (!st.ok()) {
+            ++out->errors;
+            // 처음 몇 건만 stderr로 진단 출력
+            if (out->errors <= 3)
+                std::cerr << "[bench] RPC error: code=" << st.error_code()
+                          << " msg=\"" << st.error_message() << "\"\n";
+            continue;
+        }
+        if (n < cfg.warmup) continue; 
         out->latencies_ms.push_back(Ms(t1 - t0).count());
     }
 }

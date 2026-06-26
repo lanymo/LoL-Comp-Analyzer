@@ -306,9 +306,6 @@ double StatsEngine::bootstrapWinRate(const vector<int>& ally_ids,
 
     #pragma omp parallel
     {
-        // Per-thread RNG, seeded uniquely per thread so streams don't overlap.
-        // Fixed base → reproducible for a given (seed, thread count); otherwise
-        // each thread draws a fresh nondeterministic seed.
         uint32_t seed = base_seed ? *base_seed : random_device{}();
         mt19937 rng(seed ^ (uint32_t)(omp_get_thread_num() * 2654435761u));
         uniform_int_distribution<int> dist(0, n - 1);

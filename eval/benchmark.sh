@@ -7,10 +7,6 @@
 #   2) concurrency.csv     — 동시 클라이언트 1·2·4·8·16 → latency / throughput
 #   3) intensity.csv       — 부트스트랩 R 0·100·500·1000 → 연산 강도 곡선
 #
-# 핵심 제약: OpenMP 스레드 수(OMP_NUM_THREADS)는 "서버 기동 시점"에만 적용된다.
-#            → thread scaling은 값마다 서버를 죽였다 다시 띄운다.
-#            → concurrency / intensity는 서버 한 번 띄워두고 클라이언트만 바꾼다.
-#
 # 사용법:
 #   make                      # 먼저 빌드
 #   bash eval/benchmark.sh    # 전체 스윕 실행
@@ -146,6 +142,18 @@ intensity_sweep() {
     echo "[bench] -> $out"
 }
 
+# 실험 4: Serialization microbench
+# protobuf SerializeToString/ParseFromString만 격리 측정 → R=0 통신 바닥값 안에서
+# 직렬화 몫을 분리. 서버/채널 없이 클라이언트 단독 실행.
+serialization_bench() {
+    local iters=${1:-1000000}
+    local out="$OUTDIR/serialization.csv"
+    echo "[bench] === experiment 4: serialization microbench (iters=$iters) ==="
+    "$BENCH" --serbench "$iters" > "$out"
+    cat "$out"
+    echo "[bench] -> $out"
+}
+
 main() {
     [[ -x "$SERVER" ]] || { echo "[bench] $SERVER 없음 — 먼저 'make' 하세요"; exit 1; }
     [[ -x "$BENCH"  ]] || { echo "[bench] $BENCH 없음 — 먼저 'make' 하세요";  exit 1; }
@@ -159,14 +167,16 @@ main() {
         thread)      thread_scaling      1000 ;;
         concurrency) concurrency_scaling ""   500 ;;
         intensity)   intensity_sweep     ""   1 ;;
+        serialize)   serialization_bench 1000000 ;;
         all)
             thread_scaling      1000
             concurrency_scaling ""   500
             intensity_sweep     ""   1
+            serialization_bench 1000000
             ;;
         *)
             echo "[bench] 알 수 없는 실험: '$which'"
-            echo "[bench] 사용법: bash eval/benchmark.sh [thread|concurrency|intensity|all]"
+            echo "[bench] 사용법: bash eval/benchmark.sh [thread|concurrency|intensity|serialize|all]"
             exit 1
             ;;
     esac

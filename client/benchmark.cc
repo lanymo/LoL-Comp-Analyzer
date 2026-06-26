@@ -7,6 +7,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
 
 #include <grpcpp/grpcpp.h>
 #include "analyzer.grpc.pb.h"  
@@ -19,9 +20,10 @@ struct Config {
     int clients          = 8;     // 동시 클라이언트
     int requests         = 100;   // 스레드당 요청 수
     int warmup           = 5;     // 스레드당 버릴 워밍업 요청 수(연결 수립 비용 제거)
-    int bootstrap_r      = 500;   // 서버 부트스트랩 R           → 연산 강도 축
+    int bootstrap_r      = 500;   // 서버 부트스트랩 R
     std::vector<int> ally  = {1, 2, 3, 4, 5};
     std::vector<int> enemy = {};
+    int serbench         = 0;     // >0이면 직렬화 마이크로벤치 모드(반복 횟수)
 };
 
 // 한 thread 당 결과: latency 측정용
@@ -50,6 +52,7 @@ static Config parseArgs(int argc, char** argv) {
         else if (a == "--r"         && i + 1 < argc) c.bootstrap_r = std::stoi(next());
         else if (a == "--champions" && i + 1 < argc) c.ally        = parseIds(next());
         else if (a == "--enemies"   && i + 1 < argc) c.enemy       = parseIds(next());
+        else if (a == "--serbench"  && i + 1 < argc) c.serbench    = std::stoi(next());
         else std::cerr << "Unknown flag: " << a << "\n";
     }
     return c;
@@ -135,8 +138,62 @@ static void runBenchmark(const Config& cfg) {
               << percentile(all, 0.99) << "\n";
 }
 
+// ── 직렬화 마이크로벤치 ──────────────────────────────────────────────────────
+// 서버도 채널도 없이 protobuf marshaling 비용만 격리 측정한다.
+// 목적: R=0 통신 바닥값(loopback latency) 안에서 "직렬화"가 차지하는 몫을 숫자로
+// 보여, network(RPC 프레이밍 + syscall + loopback)와 serialization을 분리해
+// 서술하기 위함. 실제 핸들러가 주고받는 것과 동일한 모양의 메시지를 쓴다.
+static void runSerializationBench(int iters) {
+    analyzer::CompRequest req;
+    for (int id : {1, 2, 3, 4, 5}) req.add_ally_ids(id);
+    req.set_bootstrap_r(500);
+
+    analyzer::CompResponse res;                            
+    res.set_win_rate(0.5237);
+    res.set_ci_low(0.4981);
+    res.set_ci_high(0.5492);
+
+    // 한 메시지에 대해 serialize / parse 비용을 각각 µs/op로 측정한다.
+    auto benchMsg = [&](const char* name, const auto& msg) {
+        std::string buf;
+        msg.SerializeToString(&buf);
+        const size_t bytes = buf.size();
+
+        volatile size_t sink = 0;  // DCE 방지용 싱크
+
+        auto s0 = Clock::now();
+        for (int i = 0; i < iters; ++i) {
+            buf.clear();
+            msg.SerializeToString(&buf);
+            sink += buf.size();
+        }
+        auto s1 = Clock::now();
+
+        typename std::decay<decltype(msg)>::type tmp;
+        auto p0 = Clock::now();
+        for (int i = 0; i < iters; ++i) {
+            sink += tmp.ParseFromString(buf) ? 1u : 0u;
+        }
+        auto p1 = Clock::now();
+        (void)sink;
+
+        double ser_us   = Ms(s1 - s0).count() * 1000.0 / iters;  // ms→µs, per-op
+        double parse_us = Ms(p1 - p0).count() * 1000.0 / iters;
+        std::cout << name << "," << bytes << "," << iters << ","
+                  << ser_us << "," << parse_us << "," << (ser_us + parse_us) << "\n";
+    };
+
+    std::cout << "message,bytes,iters,serialize_us,parse_us,roundtrip_us\n";
+    benchMsg("request",  req);
+    benchMsg("response", res);
+}
+
 int main(int argc, char** argv) {
     Config cfg = parseArgs(argc, argv);
+    if (cfg.serbench > 0) {
+        runSerializationBench(cfg.serbench);
+        return 0;
+    }
     runBenchmark(cfg);
     return 0;
 }

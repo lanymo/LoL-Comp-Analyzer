@@ -5,8 +5,9 @@ build/
 data/*.csv
 data/*.json
 
-# Benchmark results
-eval/results/
+# Benchmark results — 측정 CSV·PNG·raw 전부 추적(보고서 근거 자료).
+# 단 서버 런타임 로그(매 실행 새로 생성)는 제외.
+eval/results/server.log
 eval/*.json
 eval/*.txt
 
@@ -19,3 +20,9 @@ __pycache__/
 .vscode/
 .idea/
 *.swp
+
+# Local-only docs (kept on disk, not published)
+CLAUDE.md
+claude.md
+docs/proposal_grpc_openmp.md
+docs/kafka_extension_plan.md

@@ -16,8 +16,6 @@ using namespace std;
 // Base seed for the bootstrap RNG, resolved once from the environment.
 //   BOOTSTRAP_SEED set   → return that fixed value  (deterministic, reproducible)
 //   unset / unparseable  → return nullopt           (caller draws a fresh seed)
-// Magic-static init is thread-safe and only runs on the first call, which we
-// make from outside any parallel region.
 static optional<uint32_t> bootstrapBaseSeed() {
     static optional<uint32_t> cached = []() -> optional<uint32_t> {
         const char* s = getenv("BOOTSTRAP_SEED");

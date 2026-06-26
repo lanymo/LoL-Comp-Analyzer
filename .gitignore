@@ -24,3 +24,4 @@ __pycache__/
 CLAUDE.md
 claude.md
 docs/proposal_grpc_openmp.md
+docs/kafka_extension_plan.md

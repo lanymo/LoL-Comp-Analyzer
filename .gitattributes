@@ -1,0 +1,7 @@
+# Keep shell scripts LF so they run under WSL/Linux even when edited on Windows.
+*.sh    text eol=lf
+*.proto text eol=lf
+# C/C++ sources normalized to LF.
+*.cc    text eol=lf
+*.h     text eol=lf
+*.py    text eol=lf

@@ -7,10 +7,6 @@
 #   2) concurrency.csv     — 동시 클라이언트 1·2·4·8·16 → latency / throughput
 #   3) intensity.csv       — 부트스트랩 R 0·100·500·1000 → 연산 강도 곡선
 #
-# 핵심 제약: OpenMP 스레드 수(OMP_NUM_THREADS)는 "서버 기동 시점"에만 적용된다.
-#            → thread scaling은 값마다 서버를 죽였다 다시 띄운다.
-#            → concurrency / intensity는 서버 한 번 띄워두고 클라이언트만 바꾼다.
-#
 # 사용법:
 #   make                      # 먼저 빌드
 #   bash eval/benchmark.sh    # 전체 스윕 실행
